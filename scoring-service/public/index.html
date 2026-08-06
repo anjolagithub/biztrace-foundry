@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>BizTrace — On-Chain Merchant Trust</title>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 560px; margin: 60px auto; padding: 0 20px; background: #0b0f14; color: #e6edf3; }
+  h1 { font-size: 1.4rem; }
+  .card { background: #141a21; border: 1px solid #232b33; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  textarea, input { width: 100%; box-sizing: border-box; background: #0b0f14; color: #e6edf3; border: 1px solid #232b33; border-radius: 8px; padding: 10px; margin-top: 8px; font-family: inherit; }
+  input[type=file] { padding: 8px; }
+  button { background: #2ea043; color: white; border: none; border-radius: 8px; padding: 10px 16px; margin-top: 12px; cursor: pointer; font-weight: 600; }
+  button:disabled { background: #444; cursor: not-allowed; }
+  .badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-weight: 700; font-size: 0.85rem; }
+  .Gold { background: #f2c94c22; color: #f2c94c; }
+  .Silver { background: #bdbdbd22; color: #bdbdbd; }
+  .Bronze { background: #cd7f3222; color: #cd7f32; }
+  .Unverified { background: #ff525222; color: #ff5252; }
+  pre { white-space: pre-wrap; word-break: break-all; font-size: 0.8rem; color: #8b949e; }
+  a { color: #58a6ff; }
+</style>
+</head>
+<body>
+  <h1>🛡 BizTrace</h1>
+  <p style="color:#8b949e">AI-verified, on-chain trust credentials for African merchants — live on BOT Chain.</p>
+
+  <div class="card">
+    <h3>1. Connect wallet</h3>
+    <button id="connectBtn">Connect Wallet</button>
+    <p id="account" style="color:#8b949e"></p>
+  </div>
+
+  <div class="card">
+    <h3>2. Upload proof & register</h3>
+    <input type="file" id="documentFile" />
+    <textarea id="description" rows="3" placeholder="Briefly describe your business (name, address, what you sell)..."></textarea>
+    <button id="submitBtn">Upload, Register & Score</button>
+    <pre id="status"></pre>
+  </div>
+
+  <div class="card">
+    <h3>3. Your credential</h3>
+    <button id="refreshBtn">Check My Credential</button>
+    <div id="credential"></div>
+  </div>
+
+  <script>
+    // ---- Configure before running ----
+    const  CONTRACT_ADDRESS = "0xde8365dAF3CFdF952E2F946F19a4DcAcd57eFf0F";
+    const SCORING_SERVICE_URL = window.location.origin; // same-origin once deployed on Render
+    const CONTRACT_ABI = [
+      "function registerMerchant(string proofHash) external",
+      "function getCredential(address merchant) view returns (bool,bool,uint8,string,string,uint64)"
+    ];
+    // -----------------------------------
+
+    let provider, signer, contract, account;
+
+    document.getElementById("connectBtn").onclick = async () => {
+      if (!window.ethereum) return alert("Install MetaMask (and add BOT Chain testnet: chainId 968, RPC https://rpc.bohr.life)");
+      provider = new ethers.BrowserProvider(window.ethereum);
+      await provider.send("eth_requestAccounts", []);
+      signer = await provider.getSigner();
+      account = await signer.getAddress();
+      contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      document.getElementById("account").innerText = "Connected: " + account;
+    };
+
+    document.getElementById("submitBtn").onclick = async () => {
+      const fileInput = document.getElementById("documentFile");
+      const description = document.getElementById("description").value.trim();
+      const statusEl = document.getElementById("status");
+
+      if (!contract) return alert("Connect your wallet first.");
+      if (!fileInput.files[0]) return alert("Choose a document to upload.");
+
+      try {
+        statusEl.innerText = "1/3 — Uploading & hashing document...";
+        const formData = new FormData();
+        formData.append("document", fileInput.files[0]);
+        const hashRes = await fetch(SCORING_SERVICE_URL + "/hash-document", {
+          method: "POST",
+          body: formData,
+        });
+        const hashData = await hashRes.json();
+        if (hashData.error) throw new Error(hashData.error);
+
+        statusEl.innerText = "2/3 — Registering on-chain (sign in your wallet)...";
+        const tx = await contract.registerMerchant(hashData.fileHash);
+        await tx.wait();
+
+        statusEl.innerText = "3/3 — Requesting AI score...";
+        const scoreRes = await fetch(SCORING_SERVICE_URL + "/score", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ merchantAddress: account, fileHash: hashData.fileHash }),
+      });
+        const scoreData = await scoreRes.json();
+        if (scoreData.error) throw new Error(scoreData.error);
+
+        statusEl.innerText =
+          `Document hash: ${hashData.fileHash}\n` +
+          `File: ${hashData.fileUrl}\n` +
+          `Scored ${scoreData.score}/100 (${scoreData.tier})\n` +
+          `Tx: ${scoreData.explorer}`;
+      } catch (e) {
+        statusEl.innerText = "Error: " + e.message;
+      }
+    };
+
+    document.getElementById("refreshBtn").onclick = async () => {
+      const el = document.getElementById("credential");
+      if (!contract) return alert("Connect your wallet first.");
+      const [registered, verified, score, tier, proofHash] = await contract.getCredential(account);
+      el.innerHTML = registered
+        ? `<span class="badge ${tier}">${tier}</span> — Score: ${score}/100 ${verified ? "" : "(pending verification)"}<br><small style="color:#8b949e">Proof hash: ${proofHash}</small>`
+        : "Not registered yet.";
+    };
+  </script>
+</body>
+</html>

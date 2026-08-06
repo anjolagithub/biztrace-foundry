@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: biztrace
+    runtime: node
+    rootDir: scoring-service
+    buildCommand: npm install
+    startCommand: node index.js
+    envVars:
+      - key: BOT_TESTNET_RPC
+        value: https://rpc.bohr.life
+      - key: BIZTRACE_CONTRACT_ADDRESS
+        sync: false
+      - key: SCORER_PRIVATE_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
