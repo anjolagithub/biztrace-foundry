@@ -2,52 +2,305 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>BizTrace — On-Chain Merchant Trust</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BizTrace — On-Chain Trust for African Merchants</title>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  body { font-family: -apple-system, sans-serif; max-width: 560px; margin: 60px auto; padding: 0 20px; background: #0b0f14; color: #e6edf3; }
-  h1 { font-size: 1.4rem; }
-  .card { background: #141a21; border: 1px solid #232b33; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
-  textarea, input { width: 100%; box-sizing: border-box; background: #0b0f14; color: #e6edf3; border: 1px solid #232b33; border-radius: 8px; padding: 10px; margin-top: 8px; font-family: inherit; }
-  input[type=file] { padding: 8px; }
-  button { background: #2ea043; color: white; border: none; border-radius: 8px; padding: 10px 16px; margin-top: 12px; cursor: pointer; font-weight: 600; }
-  button:disabled { background: #444; cursor: not-allowed; }
-  .badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-weight: 700; font-size: 0.85rem; }
-  .Gold { background: #f2c94c22; color: #f2c94c; }
-  .Silver { background: #bdbdbd22; color: #bdbdbd; }
-  .Bronze { background: #cd7f3222; color: #cd7f32; }
-  .Unverified { background: #ff525222; color: #ff5252; }
-  pre { white-space: pre-wrap; word-break: break-all; font-size: 0.8rem; color: #8b949e; }
-  a { color: #58a6ff; }
+  :root {
+    --ink: #16213E;
+    --ink-deep: #0E1730;
+    --panel: #1F3157;
+    --paper: #F2EFE6;
+    --paper-dim: #C9C6BC;
+    --gold: #C9962C;
+    --gold-bright: #E4B94F;
+    --verified: #3A7A5D;
+    --line: rgba(242,239,230,0.14);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--gold-bright); }
+  h1, h2, h3, .display { font-family: 'Fraunces', serif; }
+
+  /* ---------- HERO ---------- */
+  .hero {
+    min-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 80px 24px 60px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 70% 50% at 50% 0%, rgba(201,150,44,0.10), transparent 60%);
+    pointer-events: none;
+  }
+  .eyebrow {
+    font-size: 0.78rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--gold-bright);
+    font-weight: 600;
+    margin-bottom: 20px;
+  }
+  h1.display {
+    font-size: clamp(2.4rem, 6vw, 4.4rem);
+    font-weight: 600;
+    line-height: 1.05;
+    max-width: 15ch;
+    margin: 0 0 24px;
+  }
+  .hero p.sub {
+    font-size: clamp(1rem, 2vw, 1.2rem);
+    color: var(--paper-dim);
+    max-width: 46ch;
+    line-height: 1.6;
+    margin: 0 0 44px;
+  }
+
+  /* ---------- SIGNATURE: the stamp ---------- */
+  .stamp-scene {
+    position: relative;
+    width: 220px;
+    height: 220px;
+    margin-bottom: 8px;
+  }
+  .doc {
+    position: absolute;
+    left: 50%;
+    top: 58%;
+    transform: translate(-50%, -50%) rotate(-3deg);
+    width: 150px;
+    height: 190px;
+    background: var(--paper);
+    border-radius: 3px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+  }
+  .doc::before, .doc::after {
+    content: "";
+    position: absolute;
+    left: 18px; right: 18px;
+    height: 6px;
+    background: rgba(22,33,62,0.16);
+    border-radius: 3px;
+  }
+  .doc::before { top: 28px; }
+  .doc::after { top: 44px; width: 60%; }
+  .doc .line3, .doc .line4 {
+    position: absolute;
+    left: 18px; right: 18px;
+    height: 6px;
+    background: rgba(22,33,62,0.10);
+    border-radius: 3px;
+  }
+  .seal {
+    position: absolute;
+    left: 50%;
+    top: 42%;
+    width: 92px;
+    height: 92px;
+    margin-left: -46px;
+    margin-top: -46px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, var(--gold-bright), var(--gold) 70%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 12px 26px rgba(201,150,44,0.45), inset 0 0 0 3px rgba(22,33,62,0.25);
+    transform: scale(0) rotate(-18deg);
+    animation: stamp-down 1.1s cubic-bezier(.2,1.4,.4,1) 0.5s forwards;
+  }
+  .seal svg { width: 40px; height: 40px; }
+  @keyframes stamp-down {
+    0%   { transform: scale(2.2) rotate(-18deg); opacity: 0; }
+    55%  { transform: scale(0.92) rotate(-6deg); opacity: 1; }
+    75%  { transform: scale(1.06) rotate(-6deg); }
+    100% { transform: scale(1) rotate(-6deg); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .seal { animation: none; transform: scale(1) rotate(-6deg); }
+  }
+
+  .cta-row { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
+  .btn {
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 0.95rem;
+    padding: 13px 26px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .btn:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3px; }
+  .btn-primary { background: var(--gold); color: var(--ink-deep); }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(201,150,44,0.3); }
+  .btn-ghost { background: transparent; color: var(--paper); border: 1px solid var(--line); }
+  .btn-ghost:hover { border-color: var(--paper-dim); }
+
+  /* ---------- HOW IT WORKS ---------- */
+  .section { padding: 90px 24px; max-width: 900px; margin: 0 auto; }
+  .section h2.display { font-size: clamp(1.6rem, 3vw, 2.1rem); font-weight: 600; margin: 0 0 46px; text-align: center; }
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+  @media (max-width: 720px) { .steps { grid-template-columns: 1fr; } }
+  .step { border-top: 2px solid var(--gold); padding-top: 18px; }
+  .step .num { font-family: 'Fraunces', serif; font-size: 2rem; color: var(--gold-bright); display: block; margin-bottom: 10px; }
+  .step h3 { font-size: 1.05rem; margin: 0 0 8px; }
+  .step p { color: var(--paper-dim); font-size: 0.92rem; line-height: 1.55; margin: 0; }
+
+  /* ---------- APP PANEL ---------- */
+  .app-wrap { padding: 20px 24px 100px; }
+  .app { max-width: 560px; margin: 0 auto; }
+  .app-header { text-align: center; margin-bottom: 32px; }
+  .app-header h2.display { font-size: 1.7rem; margin: 0 0 8px; }
+  .app-header p { color: var(--paper-dim); font-size: 0.94rem; margin: 0; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+  .card-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--gold-bright);
+    font-weight: 600;
+    margin-bottom: 14px;
+  }
+  textarea, input[type=file] {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--ink);
+    color: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px;
+    font-family: inherit;
+    font-size: 0.9rem;
+  }
+  textarea { margin-top: 10px; resize: vertical; }
+  input[type=file] { padding: 10px; }
+  .card button { margin-top: 14px; width: 100%; }
+  .card p.hint { color: var(--paper-dim); font-size: 0.85rem; margin: 8px 0 0; }
+  pre.status {
+    white-space: pre-wrap;
+    word-break: break-all;
+    font-size: 0.8rem;
+    color: var(--paper-dim);
+    background: var(--ink);
+    border-radius: 8px;
+    padding: 12px;
+    margin-top: 14px;
+    font-family: 'Inter', monospace;
+  }
+  .badge { display: inline-block; padding: 5px 12px; border-radius: 20px; font-weight: 700; font-size: 0.82rem; letter-spacing: 0.02em; }
+  .Gold { background: rgba(228,185,79,0.16); color: var(--gold-bright); }
+  .Silver { background: rgba(201,198,188,0.16); color: var(--paper-dim); }
+  .Bronze { background: rgba(205,127,50,0.16); color: #CD7F32; }
+  .Unverified { background: rgba(193,68,14,0.16); color: #E06B3A; }
+
+  footer { text-align: center; padding: 40px 24px; color: var(--paper-dim); font-size: 0.82rem; border-top: 1px solid var(--line); }
+  footer a { color: var(--paper-dim); text-decoration: underline; }
 </style>
 </head>
 <body>
-  <h1>🛡 BizTrace</h1>
-  <p style="color:#8b949e">AI-verified, on-chain trust credentials for African merchants — live on BOT Chain.</p>
 
-  <div class="card">
-    <h3>1. Connect wallet</h3>
-    <button id="connectBtn">Connect Wallet</button>
-    <p id="account" style="color:#8b949e"></p>
-  </div>
+  <section class="hero">
+    <div class="stamp-scene">
+      <div class="doc">
+        <div class="line3" style="top:60px; width:70%;"></div>
+        <div class="line4" style="top:76px; width:45%;"></div>
+      </div>
+      <div class="seal">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M5 12.5L9.5 17L19 7" stroke="#16213E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+    </div>
+    <div class="eyebrow">Live on BOT Chain</div>
+    <h1 class="display">Proof of a real business, stamped on-chain.</h1>
+    <p class="sub">Upload what you already have — a registration document, a receipt, an invoice. An AI reads it, judges it, and BizTrace records the verdict permanently as a credential any BOT Chain app can trust.</p>
+    <div class="cta-row">
+      <button class="btn btn-primary" onclick="document.getElementById('app').scrollIntoView({behavior:'smooth'})">Get verified</button>
+      <a class="btn btn-ghost" href="#how" style="text-decoration:none; display:inline-flex; align-items:center;">How it works</a>
+    </div>
+  </section>
 
-  <div class="card">
-    <h3>2. Upload proof & register</h3>
-    <input type="file" id="documentFile" />
-    <textarea id="description" rows="3" placeholder="Briefly describe your business (name, address, what you sell)..."></textarea>
-    <button id="submitBtn">Upload, Register & Score</button>
-    <pre id="status"></pre>
-  </div>
+  <section class="section" id="how">
+    <h2 class="display">Three steps, permanently recorded</h2>
+    <div class="steps">
+      <div class="step">
+        <span class="num">01</span>
+        <h3>Upload proof</h3>
+        <p>A registration document, a receipt, an invoice — anything that shows your business is real. It's hashed and stored, never altered.</p>
+      </div>
+      <div class="step">
+        <span class="num">02</span>
+        <h3>AI reads it</h3>
+        <p>The document's actual content is judged for legitimacy — not the filename, not a rubber stamp. Vague or unrelated documents score low, honestly.</p>
+      </div>
+      <div class="step">
+        <span class="num">03</span>
+        <h3>Credential is sealed</h3>
+        <p>A Bronze, Silver, or Gold trust credential is written on-chain, tied to your wallet — visible to any BOT Chain app from then on.</p>
+      </div>
+    </div>
+  </section>
 
-  <div class="card">
-    <h3>3. Your credential</h3>
-    <button id="refreshBtn">Check My Credential</button>
-    <div id="credential"></div>
-  </div>
+  <section class="app-wrap" id="app">
+    <div class="app">
+      <div class="app-header">
+        <h2 class="display">Get your credential</h2>
+        <p>Connect a wallet, upload proof, and see your on-chain trust score.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-label">Step 1 — Wallet</div>
+        <button class="btn btn-primary" id="connectBtn">Connect Wallet</button>
+        <p class="hint" id="account"></p>
+      </div>
+
+      <div class="card">
+        <div class="card-label">Step 2 — Proof</div>
+        <input type="file" id="documentFile" />
+        <textarea id="description" rows="3" placeholder="Briefly describe your business (name, address, what you sell)..."></textarea>
+        <button class="btn btn-primary" id="submitBtn">Upload, Register &amp; Score</button>
+        <pre class="status" id="status" style="display:none;"></pre>
+      </div>
+
+      <div class="card">
+        <div class="card-label">Step 3 — Credential</div>
+        <button class="btn btn-ghost" id="refreshBtn">Check My Credential</button>
+        <div id="credential" style="margin-top:12px;"></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Built for the BOT Chain Africa Builder Challenge 2026 ·
+    <a href="https://scan.bohr.life" target="_blank">View on BOTScan</a>
+  </footer>
 
   <script>
-    // ---- Configure before running ----
-    const  CONTRACT_ADDRESS = "0xde8365dAF3CFdF952E2F946F19a4DcAcd57eFf0F";
+    // ---- Configure ----
+    const CONTRACT_ADDRESS = "0xde8365dAF3CFdF952E2F946F19a4DcAcd57eFf0F";
     const SCORING_SERVICE_URL = window.location.origin; // same-origin once deployed on Render
     const CONTRACT_ABI = [
       "function registerMerchant(string proofHash) external",
@@ -56,6 +309,11 @@
     // -----------------------------------
 
     let provider, signer, contract, account;
+    const statusEl = document.getElementById("status");
+    function showStatus(text) {
+      statusEl.style.display = "block";
+      statusEl.innerText = text;
+    }
 
     document.getElementById("connectBtn").onclick = async () => {
       if (!window.ethereum) return alert("Install MetaMask (and add BOT Chain testnet: chainId 968, RPC https://rpc.bohr.life)");
@@ -70,13 +328,12 @@
     document.getElementById("submitBtn").onclick = async () => {
       const fileInput = document.getElementById("documentFile");
       const description = document.getElementById("description").value.trim();
-      const statusEl = document.getElementById("status");
 
       if (!contract) return alert("Connect your wallet first.");
       if (!fileInput.files[0]) return alert("Choose a document to upload.");
 
       try {
-        statusEl.innerText = "1/3 — Uploading & hashing document...";
+        showStatus("1/3 — Uploading & hashing document...");
         const formData = new FormData();
         formData.append("document", fileInput.files[0]);
         const hashRes = await fetch(SCORING_SERVICE_URL + "/hash-document", {
@@ -86,26 +343,28 @@
         const hashData = await hashRes.json();
         if (hashData.error) throw new Error(hashData.error);
 
-        statusEl.innerText = "2/3 — Registering on-chain (sign in your wallet)...";
+        showStatus("2/3 — Registering on-chain (sign in your wallet)...");
         const tx = await contract.registerMerchant(hashData.fileHash);
         await tx.wait();
 
-        statusEl.innerText = "3/3 — Requesting AI score...";
+        showStatus("3/3 — Requesting AI score...");
         const scoreRes = await fetch(SCORING_SERVICE_URL + "/score", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ merchantAddress: account, fileHash: hashData.fileHash }),
-      });
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ merchantAddress: account, fileHash: hashData.fileHash }),
+        });
         const scoreData = await scoreRes.json();
         if (scoreData.error) throw new Error(scoreData.error);
 
-        statusEl.innerText =
+        showStatus(
           `Document hash: ${hashData.fileHash}\n` +
           `File: ${hashData.fileUrl}\n` +
+          `Reasoning: ${scoreData.reasoning || "—"}\n` +
           `Scored ${scoreData.score}/100 (${scoreData.tier})\n` +
-          `Tx: ${scoreData.explorer}`;
+          `Tx: ${scoreData.explorer}`
+        );
       } catch (e) {
-        statusEl.innerText = "Error: " + e.message;
+        showStatus("Error: " + e.message);
       }
     };
 
@@ -114,7 +373,7 @@
       if (!contract) return alert("Connect your wallet first.");
       const [registered, verified, score, tier, proofHash] = await contract.getCredential(account);
       el.innerHTML = registered
-        ? `<span class="badge ${tier}">${tier}</span> — Score: ${score}/100 ${verified ? "" : "(pending verification)"}<br><small style="color:#8b949e">Proof hash: ${proofHash}</small>`
+        ? `<span class="badge ${tier}">${tier}</span> — Score: ${score}/100 ${verified ? "" : "(pending verification)"}<br><small style="color:var(--paper-dim)">Proof hash: ${proofHash}</small>`
         : "Not registered yet.";
     };
   </script>

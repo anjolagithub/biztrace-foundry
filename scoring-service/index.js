@@ -15,6 +15,9 @@
  *      document text and submits submitScore() itself (legitimately
  *      onlyScorer, called by the service's own wallet).
  *
+ * Also exposes a read-only WhatsApp lookup (/whatsapp, via Twilio) — no
+ * wallet signing, just checks an existing credential by address.
+ *
  * Uses Groq's free tier for scoring (no billing required). Get a free API
  * key at https://console.groq.com/keys and set GROQ_API_KEY in .env.
  * Without a key set, falls back to a heuristic and logs a warning — the
@@ -29,6 +32,7 @@ const fs = require("fs");
 const path = require("path");
 const pdfParse = require("pdf-parse");
 const { ethers } = require("ethers");
+const { MessagingResponse } = require("twilio").twiml;
 require("dotenv").config();
 
 const BIZTRACE_ABI = [
@@ -49,7 +53,10 @@ const upload = multer({
   storage: multer.diskStorage({
     destination: UPLOAD_DIR,
     filename: (req, file, cb) => {
-      cb(null, `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`);
+      cb(
+        null,
+        `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`,
+      );
     },
   }),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB cap
@@ -58,19 +65,23 @@ const upload = multer({
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
+app.use(express.urlencoded({ extended: false })); // Twilio webhooks send form-encoded, not JSON
 
 app.use("/uploads", express.static(UPLOAD_DIR)); // lets judges open the file via URL
 
 app.use(express.static(path.join(__dirname, "public"))); // serves the frontend (index.html) directly
 
 const provider = new ethers.JsonRpcProvider(
-  process.env.BOT_TESTNET_RPC || "https://rpc.bohr.life"
+  process.env.BOT_TESTNET_RPC || "https://rpc.bohr.life",
 );
-const scorerWallet = new ethers.Wallet(process.env.SCORER_PRIVATE_KEY, provider);
+const scorerWallet = new ethers.Wallet(
+  process.env.SCORER_PRIVATE_KEY,
+  provider,
+);
 const contract = new ethers.Contract(
   process.env.BIZTRACE_CONTRACT_ADDRESS,
   BIZTRACE_ABI,
-  scorerWallet
+  scorerWallet,
 );
 
 function sha256File(filePath) {
@@ -88,9 +99,6 @@ async function extractText(filePath, mimeType) {
   if (mimeType.startsWith("text/")) {
     return buffer.toString("utf-8").trim();
   }
-  // Images and other types: no text extraction wired up yet (would need
-  // OCR). Return empty string so scoring can flag "no readable content"
-  // honestly instead of pretending.
   return "";
 }
 
@@ -104,7 +112,7 @@ async function scoreWithAI(extractedText, filename) {
   if (!process.env.GROQ_API_KEY) {
     console.warn(
       "⚠️  GROQ_API_KEY not set — using placeholder heuristic, not real AI. " +
-      "Get a free key at https://console.groq.com/keys"
+        "Get a free key at https://console.groq.com/keys",
     );
     return scoreWithHeuristic(extractedText);
   }
@@ -134,18 +142,21 @@ Score 30-60 (Bronze) for vague or minimal business evidence.
 Score 60-85 (Silver) for reasonably solid business evidence.
 Score 85-100 (Gold) for strong, specific, verifiable-looking business documentation.`;
 
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
+  const response = await fetch(
+    "https://api.groq.com/openai/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.2,
+      }),
     },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.2,
-    }),
-  });
+  );
 
   if (!response.ok) {
     const errText = await response.text();
@@ -154,7 +165,6 @@ Score 85-100 (Gold) for strong, specific, verifiable-looking business documentat
 
   const data = await response.json();
   const rawText = data.choices?.[0]?.message?.content || "";
-  // Model sometimes wraps JSON in markdown fences despite instructions — strip them.
   const cleaned = rawText.replace(/```json|```/g, "").trim();
 
   let parsed;
@@ -167,20 +177,30 @@ Score 85-100 (Gold) for strong, specific, verifiable-looking business documentat
 
   const score = Math.max(0, Math.min(100, Math.round(parsed.score)));
   const validTiers = ["Unverified", "Bronze", "Silver", "Gold"];
-  const tier = validTiers.includes(parsed.tier) ? parsed.tier : tierFromScore(score);
+  const tier = validTiers.includes(parsed.tier)
+    ? parsed.tier
+    : tierFromScore(score);
 
   return { score, tier, reasoning: parsed.reasoning || "" };
 }
 
 function tierFromScore(score) {
-  return score >= 85 ? "Gold" : score >= 60 ? "Silver" : score >= 30 ? "Bronze" : "Unverified";
+  return score >= 85
+    ? "Gold"
+    : score >= 60
+    ? "Silver"
+    : score >= 30
+    ? "Bronze"
+    : "Unverified";
 }
 
 /** Fallback only — NOT real AI, see warning above. */
 function scoreWithHeuristic(text) {
   const length = text.trim().length;
   const hasNumbers = /\d/.test(text);
-  const hasAddress = /(street|road|market|lagos|ibadan|abuja|ogbomoso)/i.test(text);
+  const hasAddress = /(street|road|market|lagos|ibadan|abuja|ogbomoso)/i.test(
+    text,
+  );
 
   let score = 20;
   if (length > 50) score += 20;
@@ -192,31 +212,34 @@ function scoreWithHeuristic(text) {
   return {
     score,
     tier: tierFromScore(score),
-    reasoning: "Heuristic fallback (no GROQ_API_KEY set) — not real AI scoring.",
+    reasoning:
+      "Heuristic fallback (no GROQ_API_KEY set) — not real AI scoring.",
   };
 }
 
-/**
- * STEP 1 — Upload, hash, and extract text from a document.
- * multipart/form-data: document (file)
- * Returns the hash + a viewable URL. Does NOT touch the chain.
- * The frontend takes fileHash and calls registerMerchant(fileHash) itself,
- * signed by the merchant's own wallet.
- */
 app.post("/hash-document", upload.single("document"), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: "document file is required" });
+    if (!req.file)
+      return res.status(400).json({ error: "document file is required" });
 
     const fileHash = sha256File(req.file.path);
-    const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+    const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${
+      req.file.filename
+    }`;
 
     let extractedText = "";
     try {
       extractedText = await extractText(req.file.path, req.file.mimetype);
     } catch (e) {
-      console.warn("Text extraction failed (will score with empty content):", e.message);
+      console.warn(
+        "Text extraction failed (will score with empty content):",
+        e.message,
+      );
     }
-    extractedTextByHash.set(fileHash, { text: extractedText, filename: req.file.originalname });
+    extractedTextByHash.set(fileHash, {
+      text: extractedText,
+      filename: req.file.originalname,
+    });
 
     res.json({
       fileHash,
@@ -230,12 +253,6 @@ app.post("/hash-document", upload.single("document"), async (req, res) => {
   }
 });
 
-/**
- * STEP 2 — Score an already-registered merchant.
- * { merchantAddress, fileHash } -> looks up the extracted text from step 1,
- * runs real AI scoring, submits on-chain.
- * Call this AFTER the merchant's registerMerchant() tx has confirmed.
- */
 app.post("/score", async (req, res) => {
   try {
     const { merchantAddress, fileHash } = req.body;
@@ -243,7 +260,9 @@ app.post("/score", async (req, res) => {
       return res.status(400).json({ error: "Invalid merchantAddress" });
     }
     if (!fileHash || !extractedTextByHash.has(fileHash)) {
-      return res.status(400).json({ error: "Unknown fileHash — call /hash-document first" });
+      return res
+        .status(400)
+        .json({ error: "Unknown fileHash — call /hash-document first" });
     }
 
     const { text, filename } = extractedTextByHash.get(fileHash);
@@ -266,15 +285,67 @@ app.post("/score", async (req, res) => {
   }
 });
 
+/**
+ * WhatsApp webhook (Twilio). Read-only credential lookup — no wallet
+ * signing, no registration. A user texts a wallet address, gets back
+ * that merchant's BizTrace credential. Configure this URL as your
+ * Twilio WhatsApp Sandbox 'WHEN A MESSAGE COMES IN' webhook:
+ *   https://<your-render-url>/whatsapp
+ */
+app.post("/whatsapp", async (req, res) => {
+  const twiml = new MessagingResponse();
+  const incoming = (req.body.Body || "").trim();
+
+  try {
+    if (!ethers.isAddress(incoming)) {
+      twiml.message(
+        "👋 Welcome to BizTrace.\n\nSend a wallet address (starts with 0x) to check that merchant's on-chain trust credential.",
+      );
+    } else {
+      const [registered, verified, score, tier] = await contract.getCredential(
+        incoming,
+      );
+      if (!registered) {
+        twiml.message(`No BizTrace credential found for ${incoming}.`);
+      } else {
+        const status = verified ? "" : " (pending AI verification)";
+        twiml.message(
+          `🛡 BizTrace Credential\n\n` +
+            `Address: ${incoming}\n` +
+            `Tier: ${tier}${status}\n` +
+            `Score: ${score}/100\n\n` +
+            `View on-chain: https://scan.bohr.life/address/${incoming}`,
+        );
+      }
+    }
+  } catch (err) {
+    console.error("WhatsApp webhook error:", err);
+    twiml.message(
+      "Something went wrong looking that up. Try again in a moment.",
+    );
+  }
+
+  res.type("text/xml").send(twiml.toString());
+});
+
 app.get("/credential/:address", async (req, res) => {
   try {
     const [registered, verified, score, tier, proofHash, scoredAt] =
       await contract.getCredential(req.params.address);
-    res.json({ registered, verified, score: Number(score), tier, proofHash, scoredAt: Number(scoredAt) });
+    res.json({
+      registered,
+      verified,
+      score: Number(score),
+      tier,
+      proofHash,
+      scoredAt: Number(scoredAt),
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`BizTrace scoring service running on :${PORT}`));
+app.listen(PORT, () =>
+  console.log(`BizTrace scoring service running on :${PORT}`),
+);
