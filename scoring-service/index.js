@@ -128,7 +128,12 @@ Score 85-100 (Gold) for strong, specific, verifiable-looking business documentat
 }
 
 function parseAIJsonResponse(rawText) {
-  const cleaned = rawText.replace(/```json|```/g, "").trim();
+  // Strip any <think>...</think> reasoning blocks some models prepend,
+  // plus markdown code fences, before attempting to parse.
+  const cleaned = rawText
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/```json|```/g, "")
+    .trim();
   const parsed = JSON.parse(cleaned);
   const score = Math.max(0, Math.min(100, Math.round(parsed.score)));
   const validTiers = ["Unverified", "Bronze", "Silver", "Gold"];
@@ -139,27 +144,43 @@ function parseAIJsonResponse(rawText) {
 /** Scores a text document (PDF/.txt content) using Groq's text model. */
 async function scoreTextWithAI(text, filename) {
   if (!text || text.length < 5) {
-    return { score: 10, tier: "Unverified", reasoning: "Document has no readable text content — cannot verify." };
+    return {
+      score: 10,
+      tier: "Unverified",
+      reasoning: "Document has no readable text content — cannot verify.",
+    };
   }
 
-  const prompt = scoringPromptFor(filename, `Extracted document text:\n"""\n${text.slice(0, 4000)}\n"""`);
+  const prompt = scoringPromptFor(
+    filename,
+    `Extracted document text:\n"""\n${text.slice(0, 4000)}\n"""`,
+  );
 
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.GROQ_API_KEY}` },
-    body: JSON.stringify({
-      model: TEXT_MODEL,
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.2,
-    }),
-  });
+  const response = await fetch(
+    "https://api.groq.com/openai/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: TEXT_MODEL,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.2,
+        response_format: { type: "json_object" },
+      }),
+    },
+  );
 
-  if (!response.ok) throw new Error(`Groq API error: ${response.status} ${await response.text()}`);
+  if (!response.ok)
+    throw new Error(
+      `Groq API error: ${response.status} ${await response.text()}`,
+    );
   const data = await response.json();
   const rawText = data.choices?.[0]?.message?.content || "";
   return parseAIJsonResponse(rawText);
-}
-
+}4544
 /** Scores an image (photo of storefront, receipt, etc.) using Groq's vision model. */
 async function scoreImageWithAI(filePath, mimeType, filename) {
   const base64Image = fs.readFileSync(filePath).toString("base64");
@@ -180,6 +201,8 @@ async function scoreImageWithAI(filePath, mimeType, filename) {
         },
       ],
       temperature: 0.2,
+      response_format: { type: "json_object" },
+      reasoning_effort: "none",
     }),
   });
 
@@ -188,7 +211,6 @@ async function scoreImageWithAI(filePath, mimeType, filename) {
   const rawText = data.choices?.[0]?.message?.content || "";
   return parseAIJsonResponse(rawText);
 }
-
 function tierFromScore(score) {
   return score >= 85 ? "Gold" : score >= 60 ? "Silver" : score >= 30 ? "Bronze" : "Unverified";
 }
