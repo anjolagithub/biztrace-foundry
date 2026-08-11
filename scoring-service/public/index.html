@@ -226,8 +226,27 @@
       width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
       padding: 12px 14px; font-size: 12px; color: var(--muted2); line-height: 1.6; margin-bottom: 14px;
     }
-    .score-breakdown { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
-    .breakdown-item { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+   .score-breakdown { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+.result-section-label {
+  width: 100%; font-family: 'DM Mono', monospace; font-size: 9px; color: var(--accent);
+  letter-spacing: 0.12em; text-transform: uppercase; margin: 18px 0 10px; display: flex;
+  align-items: center; gap: 8px;
+}
+.result-section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.result-section-label.ai-section { color: var(--bronze); }
+.not-onchain-note {
+  width: 100%; font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted);
+  margin: -4px 0 10px; line-height: 1.5; letter-spacing: 0.02em;
+}
+.doc-scan-grid { display: grid; grid-template-columns: 1fr; gap: 8px; width: 100%; margin-bottom: 14px; }
+.doc-scan-item {
+  background: var(--bg); border: 1px solid rgba(251,191,36,0.25); border-radius: 8px;
+  padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; gap: 10px;
+}
+.doc-scan-key { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted2); text-transform: uppercase; letter-spacing: 0.06em; flex-shrink: 0; }
+.doc-scan-val { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; color: var(--text); text-align: right; word-break: break-word; }
+.doc-scan-val.yes { color: var(--silver); }
+.doc-scan-val.no { color: var(--muted2); }
     .breakdown-key { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
     .breakdown-val { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; color: var(--text); word-break: break-all; }
     .breakdown-val.positive { color: var(--accent); }
@@ -429,9 +448,17 @@
           <div class="score-gauge">
             <div class="score-gauge-fill" id="scoreGauge" style="width:0%"></div>
           </div>
-          <div class="score-reasoning" id="scoreReasoning" style="display:none;"></div>
+
+          <div class="result-section-label">✓ On-Chain Credential</div>
           <div class="score-breakdown" id="scoreBreakdown"></div>
           <div class="tx-link" id="txLink"></div>
+
+          <div id="docScanSection" style="display:none; width:100%;">
+            <div class="result-section-label ai-section">🔍 AI Document Scan</div>
+            <div class="not-onchain-note">Extracted by AI from the uploaded document just now. Not written to the blockchain — only score and tier above are permanent.</div>
+            <div class="score-reasoning" id="scoreReasoning" style="display:none;"></div>
+            <div class="doc-scan-grid" id="docScanGrid"></div>
+          </div>
         </div>
       </div>
 
@@ -512,7 +539,7 @@
     return { Gold: '#c8f55a', Silver: '#4ade80', Bronze: '#fbbf24', Unverified: '#ef4444' }[tier] || '#ef4444';
   }
 
-  function displayCredential(data, txHash) {
+  function displayCredential(data, txHash, docScan) {
     document.getElementById('emptyState').style.display = 'none';
     const display = document.getElementById('scoreDisplay');
     display.classList.add('visible');
@@ -546,14 +573,7 @@
       gauge.style.background = getGaugeColor(tier);
     }, 100);
 
-    const reasoningEl = document.getElementById('scoreReasoning');
-    if (data.reasoning) {
-      reasoningEl.style.display = 'block';
-      reasoningEl.textContent = data.reasoning;
-    } else {
-      reasoningEl.style.display = 'none';
-    }
-
+    // ---- ON-CHAIN CREDENTIAL (permanent, always shown) ----
     document.getElementById('scoreBreakdown').innerHTML = [
       { key: 'Registered', val: data.registered ? '✓ Yes' : '✗ No', positive: data.registered },
       { key: 'Verified', val: data.verified ? '✓ Yes' : '⏳ Pending', positive: data.verified },
@@ -571,6 +591,41 @@
       txLink.innerHTML = `Proof hash: ${data.proofHash.slice(0,14)}...${data.proofHash.slice(-8)}`;
     } else {
       txLink.innerHTML = '';
+    }
+
+    // ---- AI DOCUMENT SCAN (session-only, NOT stored on-chain) ----
+    // Only shown right after a fresh upload+score in THIS session — a plain
+    // wallet lookup (doLookup) has no way to know this, since it isn't
+    // recorded on-chain, so docScan is omitted entirely for lookups.
+    const docScanSection = document.getElementById('docScanSection');
+    const reasoningEl = document.getElementById('scoreReasoning');
+
+    if (docScan) {
+      docScanSection.style.display = 'block';
+
+      if (docScan.reasoning) {
+        reasoningEl.style.display = 'block';
+        reasoningEl.textContent = docScan.reasoning;
+      } else {
+        reasoningEl.style.display = 'none';
+      }
+
+      document.getElementById('docScanGrid').innerHTML = [
+        { key: 'Business Name', val: docScan.businessName || 'Not detected' },
+        { key: 'Document Type', val: docScan.documentType || 'Other' },
+        {
+          key: 'Registration No. Present',
+          val: docScan.hasRegistrationNumber ? '✓ Yes' : '✗ No',
+          cls: docScan.hasRegistrationNumber ? 'yes' : 'no',
+        },
+      ].map(item => `
+        <div class="doc-scan-item">
+          <span class="doc-scan-key">${item.key}</span>
+          <span class="doc-scan-val ${item.cls || ''}">${item.val}</span>
+        </div>
+      `).join('');
+    } else {
+      docScanSection.style.display = 'none';
     }
   }
 
@@ -692,8 +747,9 @@
       clearStatus();
       setStatus('success', '🎉 Credential scored and recorded on-chain!');
       displayCredential(
-        { registered: true, verified: true, score: scoreData.score, tier: scoreData.tier, reasoning: scoreData.reasoning, proofHash: hashData.fileHash },
-        scoreData.txHash
+        { registered: true, verified: true, score: scoreData.score, tier: scoreData.tier, proofHash: hashData.fileHash },
+        scoreData.txHash,
+        { reasoning: scoreData.reasoning, businessName: scoreData.businessName, documentType: scoreData.documentType, hasRegistrationNumber: scoreData.hasRegistrationNumber }
       );
       btnText.textContent = 'Credential Updated ✓';
 
