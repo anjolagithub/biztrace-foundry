@@ -67,10 +67,7 @@ const upload = multer({
   storage: multer.diskStorage({
     destination: UPLOAD_DIR,
     filename: (req, file, cb) => {
-      cb(
-        null,
-        `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`,
-      );
+      cb(null, `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`);
     },
   }),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB cap
@@ -85,16 +82,13 @@ app.use("/uploads", express.static(UPLOAD_DIR)); // lets judges open the file vi
 app.use(express.static(path.join(__dirname, "public"))); // serves the frontend (index.html) directly
 
 const provider = new ethers.JsonRpcProvider(
-  process.env.BOT_TESTNET_RPC || "https://rpc.bohr.life",
+  process.env.BOT_RPC || "https://rpc.botchain.ai",
 );
-const scorerWallet = new ethers.Wallet(
-  process.env.SCORER_PRIVATE_KEY,
-  provider,
-);
+const scorerWallet = new ethers.Wallet(process.env.SCORER_PRIVATE_KEY, provider);
 const contract = new ethers.Contract(
   process.env.BIZTRACE_CONTRACT_ADDRESS,
   BIZTRACE_ABI,
-  scorerWallet,
+  scorerWallet
 );
 
 function sha256File(filePath) {
@@ -116,12 +110,7 @@ async function inspectUpload(filePath, mimeType) {
   }
   if (mimeType.startsWith("text/")) {
     const buffer = fs.readFileSync(filePath);
-    return {
-      kind: "text",
-      text: buffer.toString("utf-8").trim(),
-      filePath,
-      mimeType,
-    };
+    return { kind: "text", text: buffer.toString("utf-8").trim(), filePath, mimeType };
   }
   if (mimeType.startsWith(IMAGE_MIME_PREFIX)) {
     return { kind: "image", filePath, mimeType };
@@ -164,19 +153,9 @@ function parseAIJsonResponse(rawText) {
   const parsed = JSON.parse(cleaned);
   const score = Math.max(0, Math.min(100, Math.round(parsed.score)));
   const validTiers = ["Unverified", "Bronze", "Silver", "Gold"];
-  const tier = validTiers.includes(parsed.tier)
-    ? parsed.tier
-    : tierFromScore(score);
-  const validDocTypes = [
-    "Registration Certificate",
-    "Receipt/Invoice",
-    "Storefront Photo",
-    "Utility Bill",
-    "Other",
-  ];
-  const documentType = validDocTypes.includes(parsed.documentType)
-    ? parsed.documentType
-    : "Other";
+  const tier = validTiers.includes(parsed.tier) ? parsed.tier : tierFromScore(score);
+  const validDocTypes = ["Registration Certificate", "Receipt/Invoice", "Storefront Photo", "Utility Bill", "Other"];
+  const documentType = validDocTypes.includes(parsed.documentType) ? parsed.documentType : "Other";
   return {
     score,
     tier,
@@ -188,7 +167,7 @@ function parseAIJsonResponse(rawText) {
 }
 
 /** Scores a text document (PDF/.txt content) using Groq's text model. */
-async function scoreTextWithAI(text, filename) {
+async function scoreTextWithAI(text, filename, description) {
   if (!text || text.length < 5) {
     return {
       score: 10,
@@ -200,91 +179,60 @@ async function scoreTextWithAI(text, filename) {
     };
   }
 
-  const prompt = scoringPromptFor(
-    filename,
-    `Extracted document text:\n"""\n${text.slice(0, 4000)}\n"""`,
-  );
+  const merchantNote = description ? `\nMerchant's own description: "${description}"` : "";
+  const prompt = scoringPromptFor(filename, `Extracted document text:\n"""\n${text.slice(0, 4000)}\n"""${merchantNote}`);
 
-  const response = await fetch(
-    "https://api.groq.com/openai/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: TEXT_MODEL,
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-      }),
-    },
-  );
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.GROQ_API_KEY}` },
+    body: JSON.stringify({
+      model: TEXT_MODEL,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+    }),
+  });
 
-  if (!response.ok)
-    throw new Error(
-      `Groq API error: ${response.status} ${await response.text()}`,
-    );
+  if (!response.ok) throw new Error(`Groq API error: ${response.status} ${await response.text()}`);
   const data = await response.json();
   const rawText = data.choices?.[0]?.message?.content || "";
   return parseAIJsonResponse(rawText);
 }
 
 /** Scores an image (photo of storefront, receipt, etc.) using Groq's vision model. */
-async function scoreImageWithAI(filePath, mimeType, filename) {
+async function scoreImageWithAI(filePath, mimeType, filename, description) {
   const base64Image = fs.readFileSync(filePath).toString("base64");
-  const prompt = scoringPromptFor(
-    filename,
-    "Look at the attached image and judge it as described.",
-  );
+  const merchantNote = description ? `\nMerchant's own description: "${description}"` : "";
+  const prompt = scoringPromptFor(filename, `Look at the attached image and judge it as described.${merchantNote}`);
 
-  const response = await fetch(
-    "https://api.groq.com/openai/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: VISION_MODEL,
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: prompt },
-              {
-                type: "image_url",
-                image_url: { url: `data:${mimeType};base64,${base64Image}` },
-              },
-            ],
-          },
-        ],
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-        reasoning_effort: "none",
-      }),
-    },
-  );
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.GROQ_API_KEY}` },
+    body: JSON.stringify({
+      model: VISION_MODEL,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Image}` } },
+          ],
+        },
+      ],
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      reasoning_effort: "none",
+    }),
+  });
 
-  if (!response.ok)
-    throw new Error(
-      `Groq vision API error: ${response.status} ${await response.text()}`,
-    );
+  if (!response.ok) throw new Error(`Groq vision API error: ${response.status} ${await response.text()}`);
   const data = await response.json();
   const rawText = data.choices?.[0]?.message?.content || "";
   return parseAIJsonResponse(rawText);
 }
 
 function tierFromScore(score) {
-  return score >= 85
-    ? "Gold"
-    : score >= 60
-    ? "Silver"
-    : score >= 30
-    ? "Bronze"
-    : "Unverified";
+  return score >= 85 ? "Gold" : score >= 60 ? "Silver" : score >= 30 ? "Bronze" : "Unverified";
 }
 
 /** Fallback only — NOT real AI. Used when GROQ_API_KEY isn't set, or content is unreadable. */
@@ -292,9 +240,7 @@ function scoreWithHeuristic(text) {
   const t = text || "";
   const length = t.trim().length;
   const hasNumbers = /\d/.test(t);
-  const hasAddress = /(street|road|market|lagos|ibadan|abuja|ogbomoso)/i.test(
-    t,
-  );
+  const hasAddress = /(street|road|market|lagos|ibadan|abuja|ogbomoso)/i.test(t);
 
   let score = 20;
   if (length > 50) score += 20;
@@ -306,8 +252,7 @@ function scoreWithHeuristic(text) {
   return {
     score,
     tier: tierFromScore(score),
-    reasoning:
-      "Heuristic fallback (no GROQ_API_KEY set) — not real AI scoring.",
+    reasoning: "Heuristic fallback (no GROQ_API_KEY set) — not real AI scoring.",
     businessName: "Not detected",
     documentType: "Other",
     hasRegistrationNumber: false,
@@ -315,19 +260,17 @@ function scoreWithHeuristic(text) {
 }
 
 /** Dispatches to the right real-AI scorer based on what the upload actually was. */
-async function scoreUpload(uploadInfo, filename) {
+async function scoreUpload(uploadInfo, filename, description) {
   if (!process.env.GROQ_API_KEY) {
-    console.warn(
-      "⚠️  GROQ_API_KEY not set — using placeholder heuristic, not real AI. Get a free key at https://console.groq.com/keys",
-    );
+    console.warn("⚠️  GROQ_API_KEY not set — using placeholder heuristic, not real AI. Get a free key at https://console.groq.com/keys");
     return scoreWithHeuristic(uploadInfo.text);
   }
 
   if (uploadInfo.kind === "text") {
-    return scoreTextWithAI(uploadInfo.text, filename);
+    return scoreTextWithAI(uploadInfo.text, filename, description);
   }
   if (uploadInfo.kind === "image") {
-    return scoreImageWithAI(uploadInfo.filePath, uploadInfo.mimeType, filename);
+    return scoreImageWithAI(uploadInfo.filePath, uploadInfo.mimeType, filename, description);
   }
   return {
     score: 5,
@@ -348,24 +291,17 @@ async function scoreUpload(uploadInfo, filename) {
  */
 app.post("/hash-document", upload.single("document"), async (req, res) => {
   try {
-    if (!req.file)
-      return res.status(400).json({ error: "document file is required" });
+    if (!req.file) return res.status(400).json({ error: "document file is required" });
 
     const fileHash = sha256File(req.file.path);
-    const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${
-      req.file.filename
-    }`;
+    const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
 
     let info;
     try {
       info = await inspectUpload(req.file.path, req.file.mimetype);
     } catch (e) {
       console.warn("Content inspection failed:", e.message);
-      info = {
-        kind: "none",
-        filePath: req.file.path,
-        mimeType: req.file.mimetype,
-      };
+      info = { kind: "none", filePath: req.file.path, mimeType: req.file.mimetype };
     }
     uploadsByHash.set(fileHash, { ...info, filename: req.file.originalname });
 
@@ -384,31 +320,23 @@ app.post("/hash-document", upload.single("document"), async (req, res) => {
 
 /**
  * STEP 2 — Score an already-registered merchant.
- * { merchantAddress, fileHash } -> looks up the upload from step 1,
- * runs real AI scoring (text or vision depending on the file type),
- * submits on-chain. Call this AFTER registerMerchant() has confirmed.
+ * { merchantAddress, fileHash, description } -> looks up the upload from
+ * step 1, runs real AI scoring (text or vision depending on the file type,
+ * using the merchant's optional description as extra context), submits
+ * on-chain. Call this AFTER registerMerchant() has confirmed.
  */
 app.post("/score", async (req, res) => {
   try {
-    const { merchantAddress, fileHash } = req.body;
+    const { merchantAddress, fileHash, description } = req.body;
     if (!ethers.isAddress(merchantAddress)) {
       return res.status(400).json({ error: "Invalid merchantAddress" });
     }
     if (!fileHash || !uploadsByHash.has(fileHash)) {
-      return res
-        .status(400)
-        .json({ error: "Unknown fileHash — call /hash-document first" });
+      return res.status(400).json({ error: "Unknown fileHash — call /hash-document first" });
     }
 
     const uploadInfo = uploadsByHash.get(fileHash);
-    const {
-      score,
-      tier,
-      reasoning,
-      businessName,
-      documentType,
-      hasRegistrationNumber,
-    } = await scoreUpload(uploadInfo, uploadInfo.filename);
+    const { score, tier, reasoning, businessName, documentType, hasRegistrationNumber } = await scoreUpload(uploadInfo, uploadInfo.filename, description);
 
     const tx = await contract.submitScore(merchantAddress, score, tier);
     const receipt = await tx.wait();
@@ -422,7 +350,7 @@ app.post("/score", async (req, res) => {
       documentType,
       hasRegistrationNumber,
       txHash: receipt.hash,
-      explorer: `https://scan.bohr.life/tx/${receipt.hash}`,
+      explorer: `https://scan.botchain.ai/tx/${receipt.hash}`,
     });
   } catch (err) {
     console.error(err);
@@ -443,27 +371,21 @@ app.post("/whatsapp", async (req, res) => {
 
   try {
     if (!ethers.isAddress(incoming)) {
-      twiml.message(
-        "👋 Welcome to BizTrace.\n\nSend a wallet address (starts with 0x) to check that merchant's on-chain trust credential.",
-      );
+      twiml.message("👋 Welcome to BizTrace.\n\nSend a wallet address (starts with 0x) to check that merchant's on-chain trust credential.");
     } else {
-      const [registered, verified, score, tier] = await contract.getCredential(
-        incoming,
-      );
+      const [registered, verified, score, tier] = await contract.getCredential(incoming);
       if (!registered) {
         twiml.message(`No BizTrace credential found for ${incoming}.`);
       } else {
         const status = verified ? "" : " (pending AI verification)";
         twiml.message(
-          `🛡 BizTrace Credential\n\nAddress: ${incoming}\nTier: ${tier}${status}\nScore: ${score}/100\n\nView on-chain: https://scan.bohr.life/address/${incoming}`,
+          `🛡 BizTrace Credential\n\nAddress: ${incoming}\nTier: ${tier}${status}\nScore: ${score}/100\n\nView on-chain: https://scan.botchain.ai/address/${incoming}`,
         );
       }
     }
   } catch (err) {
     console.error("WhatsApp webhook error:", err);
-    twiml.message(
-      "Something went wrong looking that up. Try again in a moment.",
-    );
+    twiml.message("Something went wrong looking that up. Try again in a moment.");
   }
 
   res.type("text/xml").send(twiml.toString());
@@ -473,20 +395,11 @@ app.get("/credential/:address", async (req, res) => {
   try {
     const [registered, verified, score, tier, proofHash, scoredAt] =
       await contract.getCredential(req.params.address);
-    res.json({
-      registered,
-      verified,
-      score: Number(score),
-      tier,
-      proofHash,
-      scoredAt: Number(scoredAt),
-    });
+    res.json({ registered, verified, score: Number(score), tier, proofHash, scoredAt: Number(scoredAt) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () =>
-  console.log(`BizTrace scoring service running on :${PORT}`),
-);
+app.listen(PORT, () => console.log(`BizTrace scoring service running on :${PORT}`));
