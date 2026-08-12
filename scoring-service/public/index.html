@@ -287,6 +287,18 @@
         line-height: 1.6;
       }
 
+      .lookup-box { background: var(--bg); border: 1px solid var(--accent); border-radius: 10px; padding: 16px; margin-bottom: 20px; }
+      .lookup-box-label { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--accent); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 10px; display: block; }
+      .lookup-row { display: flex; gap: 8px; flex-wrap: wrap; }
+      .lookup-input { flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 11px 12px; color: var(--text); font-family: 'DM Mono', monospace; font-size: 11px; outline: none; transition: border-color 0.2s; }
+      .lookup-input:focus { border-color: var(--accent); }
+      .lookup-input::placeholder { color: var(--muted); }
+      .lookup-go-btn { background: var(--accent); color: var(--bg); border: none; border-radius: 6px; padding: 11px 16px; font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s; white-space: nowrap; flex-shrink: 0; }
+      .lookup-go-btn:hover { opacity: 0.85; }
+      .lookup-note { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted); margin-top: 8px; letter-spacing: 0.04em; line-height: 1.5; }
+      .divider { display: flex; align-items: center; gap: 10px; margin: 18px 0; font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); }
+      .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
       .btn-ghost-full {
         width: 100%;
         background: transparent;
@@ -968,11 +980,22 @@
         <div class="score-layout">
           <!-- INPUT PANEL -->
           <div class="score-input-panel">
-            <div class="panel-title">Get Your Credential</div>
+            <div class="panel-title">Credential Lookup & Registration</div>
             <p class="panel-subtitle">
-              Connect your wallet, upload proof of your business, and get an
-              AI-scored trust credential recorded permanently on BOT Chain.
+              Check any merchant's on-chain trust credential instantly — no wallet
+              needed. Connect your own wallet to upload proof and get verified.
             </p>
+
+            <div class="lookup-box">
+              <span class="lookup-box-label">🔍 Check any wallet instantly</span>
+              <div class="lookup-row">
+                <input type="text" class="lookup-input" id="lookupInput" placeholder="0x... paste any merchant's wallet" />
+                <button class="lookup-go-btn" onclick="doLookup()">Check →</button>
+              </div>
+              <div class="lookup-note">No wallet connection required · Reads directly from BizTrace on BOT Chain · This is how a lender, marketplace, or customer would verify a merchant</div>
+            </div>
+
+            <div class="divider">or get verified yourself</div>
 
             <div class="flow-steps" id="flowSteps">
               <div class="flow-step active" id="fStep1">
@@ -1056,8 +1079,8 @@
           <div class="score-result-panel" id="resultPanel">
             <div class="score-empty" id="emptyState">
               <div class="score-empty-icon">◎</div>
-              <div class="score-empty-text">
-                Connect your wallet to get started
+             <div class="score-empty-text">
+                Check any wallet above, or connect yours to get verified
               </div>
             </div>
 
@@ -1136,7 +1159,7 @@
       </section>
 
       <section class="contracts-section">
-        <div class="section-label">Live Contract — BOT Chain Testnet</div>
+       <div class="section-label">Live Contract — BOT Chain Mainnet</div>
         <div class="contracts-grid">
           <div class="contract-card">
             <div class="contract-tag">Verified Source</div>
@@ -1188,6 +1211,12 @@
       ];
 
       let provider, signer, contract, connectedAddress;
+
+      document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('lookupInput').addEventListener('keydown', e => {
+          if (e.key === 'Enter') doLookup();
+        });
+      });
 
       function getScoreColorClass(tier) {
         return (
@@ -1324,6 +1353,33 @@
             .join("");
         } else {
           docScanSection.style.display = "none";
+        }
+      }
+
+      async function doLookup() {
+        const wallet = document.getElementById('lookupInput').value.trim();
+        if (!wallet) return setStatus('error', 'Enter a wallet address');
+        if (!ethers.isAddress(wallet)) {
+          return setStatus('error', 'Invalid address');
+        }
+
+        setStatus('loading', `⏳ Looking up credential<span class="loading-dots"></span>`);
+
+        try {
+          const res = await fetch(`${API_URL}/credential/${wallet}`);
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Lookup failed');
+          if (!data.registered) {
+            clearStatus();
+            document.getElementById('emptyState').style.display = 'block';
+            document.getElementById('emptyState').querySelector('.score-empty-text').textContent = 'No credential found for this address';
+            document.getElementById('scoreDisplay').classList.remove('visible');
+            return;
+          }
+          clearStatus();
+          displayCredential(data, null);
+        } catch(e) {
+          setStatus('error', '✗ ' + e.message);
         }
       }
 
