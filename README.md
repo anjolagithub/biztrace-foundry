@@ -1,6 +1,3 @@
-Updating it now with mainnet as the primary deployment, not testnet:Here's the complete, updated README — replace your existing one:
-
-```markdown
 # BizTrace
 
 **AI-verified, on-chain trust credentials for African merchants — live on BOT Chain Mainnet.**
