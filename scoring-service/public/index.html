@@ -1,0 +1,1514 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
+    />
+    <title>BizTrace — On-Chain Trust for African Merchants</title>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #080808;
+        --surface: #111111;
+        --surface2: #1a1a1a;
+        --border: #222222;
+        --accent: #c8f55a;
+        --accent2: #ff6b35;
+        --text: #f0ece4;
+        --muted: #555555;
+        --muted2: #888888;
+        --gold: #c8f55a;
+        --silver: #4ade80;
+        --bronze: #fbbf24;
+        --unverified: #ef4444;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: "DM Sans", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        overflow-x: hidden;
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background-image: linear-gradient(
+            rgba(200, 245, 90, 0.03) 1px,
+            transparent 1px
+          ),
+          linear-gradient(90deg, rgba(200, 245, 90, 0.03) 1px, transparent 1px);
+        background-size: 60px 60px;
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      body::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+        opacity: 0.4;
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      .container {
+        position: relative;
+        z-index: 1;
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 0 16px;
+      }
+
+      nav {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 100;
+        border-bottom: 1px solid var(--border);
+        background: rgba(8, 8, 8, 0.85);
+        backdrop-filter: blur(16px);
+      }
+      .nav-inner {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 0 16px;
+        height: 56px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .logo {
+        font-family: "Syne", sans-serif;
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+        color: var(--text);
+        flex-shrink: 0;
+      }
+      .logo span {
+        color: var(--accent);
+      }
+      .nav-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .nav-tag {
+        font-family: "DM Mono", monospace;
+        font-size: 9px;
+        color: var(--muted2);
+        border: 1px solid var(--border);
+        padding: 3px 8px;
+        border-radius: 4px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        display: none;
+      }
+      .connect-btn {
+        font-family: "DM Mono", monospace;
+        font-size: 11px;
+        font-weight: 500;
+        background: var(--accent);
+        color: var(--bg);
+        border: none;
+        padding: 9px 14px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+      }
+      .connect-btn:hover {
+        opacity: 0.85;
+      }
+      .connect-btn.connected {
+        background: transparent;
+        border: 1px solid var(--accent);
+        color: var(--accent);
+      }
+
+      .hero {
+        padding-top: 96px;
+        padding-bottom: 56px;
+      }
+      .hero-eyebrow {
+        font-family: "DM Mono", monospace;
+        font-size: 10px;
+        color: var(--accent);
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .hero-eyebrow::before {
+        content: "";
+        display: inline-block;
+        width: 24px;
+        height: 1px;
+        background: var(--accent);
+      }
+      .hero h1 {
+        font-family: "Syne", sans-serif;
+        font-size: clamp(40px, 12vw, 96px);
+        font-weight: 800;
+        line-height: 0.9;
+        letter-spacing: clamp(-2px, -0.04em, -3px);
+        margin-bottom: 24px;
+      }
+      .hero h1 .dim {
+        color: var(--muted);
+      }
+      .hero h1 .accent {
+        color: var(--accent);
+      }
+      .hero-sub {
+        font-size: 15px;
+        color: var(--muted2);
+        max-width: 520px;
+        line-height: 1.7;
+        margin-bottom: 36px;
+        font-weight: 300;
+      }
+      .hero-stats {
+        display: flex;
+        gap: 24px;
+        flex-wrap: wrap;
+      }
+      .stat {
+        border-left: 2px solid var(--border);
+        padding-left: 12px;
+      }
+      .stat-num {
+        font-family: "Syne", sans-serif;
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--text);
+        line-height: 1;
+      }
+      .stat-label {
+        font-size: 11px;
+        color: var(--muted2);
+        margin-top: 4px;
+        font-weight: 300;
+      }
+
+      .score-section {
+        padding: 56px 0;
+        border-top: 1px solid var(--border);
+      }
+      .section-label {
+        font-family: "DM Mono", monospace;
+        font-size: 10px;
+        color: var(--muted);
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        margin-bottom: 32px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .section-label::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: var(--border);
+      }
+
+      .score-layout {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2px;
+        background: var(--border);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      @media (max-width: 720px) {
+        .score-layout {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .score-input-panel {
+        background: var(--surface);
+        padding: 28px 20px;
+      }
+      @media (min-width: 721px) {
+        .score-input-panel {
+          padding: 40px;
+        }
+      }
+      .score-result-panel {
+        background: var(--surface2);
+        padding: 32px 20px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 360px;
+      }
+      @media (min-width: 721px) {
+        .score-result-panel {
+          padding: 40px;
+          min-height: 480px;
+        }
+      }
+
+      .panel-title {
+        font-family: "Syne", sans-serif;
+        font-size: 18px;
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+      .panel-subtitle {
+        font-size: 13px;
+        color: var(--muted2);
+        margin-bottom: 28px;
+        line-height: 1.6;
+      }
+
+      .btn-ghost-full {
+        width: 100%;
+        background: transparent;
+        color: var(--muted2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 11px;
+        font-family: "DM Mono", monospace;
+        font-size: 11px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin-top: 10px;
+        letter-spacing: 0.02em;
+      }
+      .btn-ghost-full:hover:not(:disabled) {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .btn-ghost-full:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+      }
+
+      .flow-steps {
+        display: flex;
+        gap: 0;
+        margin-bottom: 14px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .flow-step {
+        flex: 1;
+        padding: 8px 4px;
+        text-align: center;
+        font-family: "DM Mono", monospace;
+        font-size: 8px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted);
+        background: var(--bg);
+        border-right: 1px solid var(--border);
+        transition: all 0.3s;
+      }
+      .flow-step:last-child {
+        border-right: none;
+      }
+      .flow-step.active {
+        color: var(--accent);
+        background: rgba(200, 245, 90, 0.06);
+      }
+      .flow-step.done {
+        color: var(--silver);
+        background: rgba(74, 222, 128, 0.04);
+      }
+      .flow-step-num {
+        display: block;
+        font-size: 13px;
+        font-weight: 700;
+        margin-bottom: 2px;
+      }
+
+      .input-group {
+        margin-bottom: 14px;
+      }
+      .input-label {
+        font-family: "DM Mono", monospace;
+        font-size: 10px;
+        color: var(--muted2);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+        display: block;
+      }
+      .wallet-input,
+      .file-input,
+      .desc-input {
+        width: 100%;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px 14px;
+        color: var(--text);
+        font-family: "DM Mono", monospace;
+        font-size: 11px;
+        outline: none;
+        transition: border-color 0.2s;
+        min-width: 0;
+      }
+      .desc-input {
+        font-family: "DM Sans", sans-serif;
+        font-size: 12px;
+        resize: vertical;
+      }
+      .wallet-input:focus,
+      .file-input:focus,
+      .desc-input:focus {
+        border-color: var(--accent);
+      }
+      .wallet-input::placeholder,
+      .desc-input::placeholder {
+        color: var(--muted);
+      }
+
+      .score-btn {
+        width: 100%;
+        background: var(--accent);
+        color: var(--bg);
+        border: none;
+        border-radius: 8px;
+        padding: 14px;
+        font-family: "Syne", sans-serif;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin-top: 8px;
+        letter-spacing: 0.02em;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+      .score-btn:hover {
+        opacity: 0.85;
+      }
+      .score-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      .wallet-required-note {
+        margin-top: 10px;
+        font-family: "DM Mono", monospace;
+        font-size: 10px;
+        color: var(--muted);
+        text-align: center;
+        letter-spacing: 0.04em;
+        line-height: 1.5;
+      }
+      .wallet-required-note a {
+        color: var(--accent);
+        text-decoration: none;
+        cursor: pointer;
+      }
+
+      .status-msg {
+        margin-top: 14px;
+        padding: 12px 14px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-family: "DM Mono", monospace;
+        display: none;
+        line-height: 1.5;
+        word-break: break-word;
+      }
+      .status-msg.loading {
+        background: rgba(200, 245, 90, 0.05);
+        border: 1px solid rgba(200, 245, 90, 0.2);
+        color: var(--accent);
+        display: block;
+      }
+      .status-msg.error {
+        background: rgba(239, 68, 68, 0.05);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        color: #ef4444;
+        display: block;
+      }
+      .status-msg.success {
+        background: rgba(200, 245, 90, 0.05);
+        border: 1px solid rgba(200, 245, 90, 0.2);
+        color: var(--accent);
+        display: block;
+      }
+
+      .score-empty {
+        text-align: center;
+        color: var(--muted);
+      }
+      .score-empty-icon {
+        font-size: 40px;
+        margin-bottom: 12px;
+        opacity: 0.3;
+      }
+      .score-empty-text {
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .score-display {
+        width: 100%;
+        display: none;
+      }
+      .score-display.visible {
+        display: block;
+      }
+
+      .score-big {
+        font-family: "Syne", sans-serif;
+        font-size: clamp(64px, 18vw, 96px);
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: -3px;
+        text-align: center;
+        margin-bottom: 8px;
+        transition: color 0.5s;
+      }
+      .score-label-badge {
+        display: inline-block;
+        font-family: "DM Mono", monospace;
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        padding: 4px 12px;
+        border-radius: 100px;
+        margin-bottom: 24px;
+      }
+      .score-gauge {
+        width: 100%;
+        height: 5px;
+        background: var(--border);
+        border-radius: 100px;
+        margin-bottom: 24px;
+        overflow: hidden;
+      }
+      .score-gauge-fill {
+        height: 100%;
+        border-radius: 100px;
+        transition: width 1s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      .score-reasoning {
+        width: 100%;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px 14px;
+        font-size: 12px;
+        color: var(--muted2);
+        line-height: 1.6;
+        margin-bottom: 14px;
+      }
+      .score-breakdown {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        width: 100%;
+      }
+      .result-section-label {
+        width: 100%;
+        font-family: "DM Mono", monospace;
+        font-size: 9px;
+        color: var(--accent);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        margin: 18px 0 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .result-section-label::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: var(--border);
+      }
+      .result-section-label.ai-section {
+        color: var(--bronze);
+      }
+      .not-onchain-note {
+        width: 100%;
+        font-family: "DM Mono", monospace;
+        font-size: 9px;
+        color: var(--muted);
+        margin: -4px 0 10px;
+        line-height: 1.5;
+        letter-spacing: 0.02em;
+      }
+      .doc-scan-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px;
+        width: 100%;
+        margin-bottom: 14px;
+      }
+      .doc-scan-item {
+        background: var(--bg);
+        border: 1px solid rgba(251, 191, 36, 0.25);
+        border-radius: 8px;
+        padding: 10px 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+      }
+      .doc-scan-key {
+        font-family: "DM Mono", monospace;
+        font-size: 10px;
+        color: var(--muted2);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        flex-shrink: 0;
+      }
+      .doc-scan-val {
+        font-family: "Syne", sans-serif;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text);
+        text-align: right;
+        word-break: break-word;
+      }
+      .doc-scan-val.yes {
+        color: var(--silver);
+      }
+      .doc-scan-val.no {
+        color: var(--muted2);
+      }
+      .breakdown-item {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px;
+      }
+      .breakdown-key {
+        font-family: "DM Mono", monospace;
+        font-size: 9px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        margin-bottom: 4px;
+      }
+      .breakdown-val {
+        font-family: "Syne", sans-serif;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text);
+        word-break: break-all;
+      }
+      .breakdown-val.positive {
+        color: var(--accent);
+      }
+
+      .tx-link {
+        display: block;
+        margin-top: 14px;
+        font-family: "DM Mono", monospace;
+        font-size: 10px;
+        color: var(--muted2);
+        text-align: center;
+        word-break: break-word;
+        line-height: 1.5;
+      }
+      .tx-link a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      .tx-link a:hover {
+        text-decoration: underline;
+      }
+
+      .score-badge-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        justify-content: center;
+        margin-bottom: 12px;
+        font-family: "DM Mono", monospace;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .badge-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+      .badge-dot.green {
+        background: var(--silver);
+        animation: blink 2s ease infinite;
+      }
+      .badge-dot.yellow {
+        background: #fbbf24;
+      }
+      @keyframes blink {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.3;
+        }
+      }
+
+      .how-section {
+        padding: 56px 0;
+        border-top: 1px solid var(--border);
+      }
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 2px;
+        background: var(--border);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        margin-top: 32px;
+      }
+      @media (max-width: 720px) {
+        .steps {
+          grid-template-columns: 1fr;
+        }
+      }
+      .step {
+        background: var(--surface);
+        padding: 24px 20px;
+        transition: background 0.2s;
+      }
+      .step:hover {
+        background: var(--surface2);
+      }
+      .step-num {
+        font-family: "Syne", sans-serif;
+        font-size: 40px;
+        font-weight: 800;
+        color: var(--border);
+        line-height: 1;
+        margin-bottom: 12px;
+      }
+      .step-title {
+        font-family: "Syne", sans-serif;
+        font-size: 14px;
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+      .step-desc {
+        font-size: 12px;
+        color: var(--muted2);
+        line-height: 1.6;
+      }
+      .step.highlight {
+        background: rgba(200, 245, 90, 0.03);
+      }
+      .step.highlight .step-num {
+        color: rgba(200, 245, 90, 0.15);
+      }
+
+      .contracts-section {
+        padding: 56px 0;
+        border-top: 1px solid var(--border);
+      }
+      .contracts-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2px;
+        background: var(--border);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        margin-top: 32px;
+      }
+      @media (max-width: 600px) {
+        .contracts-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .contract-card {
+        background: var(--surface);
+        padding: 24px 20px;
+      }
+      @media (min-width: 601px) {
+        .contract-card {
+          padding: 32px;
+        }
+      }
+      .contract-tag {
+        font-family: "DM Mono", monospace;
+        font-size: 9px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--accent);
+        background: rgba(200, 245, 90, 0.08);
+        border: 1px solid rgba(200, 245, 90, 0.2);
+        padding: 3px 8px;
+        border-radius: 4px;
+        display: inline-block;
+        margin-bottom: 14px;
+      }
+      .contract-name {
+        font-family: "Syne", sans-serif;
+        font-size: 17px;
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+      .contract-desc {
+        font-size: 13px;
+        color: var(--muted2);
+        margin-bottom: 16px;
+        line-height: 1.6;
+      }
+      .contract-addr {
+        font-family: "DM Mono", monospace;
+        font-size: 10px;
+        color: var(--muted2);
+        background: var(--bg);
+        border: 1px solid var(--border);
+        padding: 10px 12px;
+        border-radius: 6px;
+        word-break: break-all;
+        line-height: 1.6;
+      }
+      .contract-addr a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      .contract-addr a:hover {
+        text-decoration: underline;
+      }
+
+      footer {
+        border-top: 1px solid var(--border);
+        padding: 32px 0;
+        margin-top: 32px;
+      }
+      .footer-inner {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 0 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .footer-logo {
+        font-family: "Syne", sans-serif;
+        font-weight: 800;
+        font-size: 15px;
+      }
+      .footer-logo span {
+        color: var(--accent);
+      }
+      .footer-right {
+        font-family: "DM Mono", monospace;
+        font-size: 10px;
+        color: var(--muted);
+      }
+
+      @media (min-width: 480px) {
+        .nav-tag {
+          display: block;
+        }
+        .nav-inner {
+          height: 64px;
+        }
+        .hero {
+          padding-top: 120px;
+        }
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.4;
+        }
+      }
+      .loading-dots::after {
+        content: "...";
+        animation: pulse 1.2s ease-in-out infinite;
+      }
+
+      @keyframes fadeUp {
+        from {
+          opacity: 0;
+          transform: translateY(24px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .hero-eyebrow {
+        animation: fadeUp 0.6s ease both;
+      }
+      .hero h1 {
+        animation: fadeUp 0.6s 0.1s ease both;
+      }
+      .hero-sub {
+        animation: fadeUp 0.6s 0.2s ease both;
+      }
+      .hero-stats {
+        animation: fadeUp 0.6s 0.3s ease both;
+      }
+
+      .c-gold {
+        color: var(--gold);
+      }
+      .c-silver {
+        color: var(--silver);
+      }
+      .c-bronze {
+        color: var(--bronze);
+      }
+      .c-unverified {
+        color: var(--unverified);
+      }
+      .bg-gold {
+        background: rgba(200, 245, 90, 0.15);
+        border-color: rgba(200, 245, 90, 0.3);
+        color: var(--gold);
+      }
+      .bg-silver {
+        background: rgba(74, 222, 128, 0.15);
+        border-color: rgba(74, 222, 128, 0.3);
+        color: var(--silver);
+      }
+      .bg-bronze {
+        background: rgba(251, 191, 36, 0.15);
+        border-color: rgba(251, 191, 36, 0.3);
+        color: var(--bronze);
+      }
+      .bg-unverified {
+        background: rgba(239, 68, 68, 0.15);
+        border-color: rgba(239, 68, 68, 0.3);
+        color: var(--unverified);
+      }
+    </style>
+  </head>
+  <body>
+    <nav>
+      <div class="nav-inner">
+        <div class="logo">Biz<span>Trace</span></div>
+        <div class="nav-right">
+          <span class="nav-tag">BOT Chain Mainnet</span>
+          <button class="connect-btn" id="connectBtn" onclick="connectWallet()">
+            Connect Wallet
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container">
+      <section class="hero">
+        <div class="hero-eyebrow">On-Chain Trust Credential</div>
+        <h1>
+          Proof of<br />
+          <span class="dim">a real</span><br />
+          <span class="accent">business.</span>
+        </h1>
+        <p class="hero-sub">
+          BizTrace reads a document you already have — a registration paper, a
+          receipt, a photo of your storefront — and has an AI judge whether it's
+          genuine. The verdict is stamped permanently on BOT Chain as a
+          credential any app can trust.
+        </p>
+        <div class="hero-stats">
+          <div class="stat">
+            <div class="stat-num">0–100</div>
+            <div class="stat-label">Score range</div>
+          </div>
+          <div class="stat">
+            <div class="stat-num">Text + Image</div>
+            <div class="stat-label">AI reads both</div>
+          </div>
+          <div class="stat">
+            <div class="stat-num">On-chain</div>
+            <div class="stat-label">Permanent & verifiable</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="score-section">
+        <div class="section-label">Get Verified</div>
+
+        <div class="score-layout">
+          <!-- INPUT PANEL -->
+          <div class="score-input-panel">
+            <div class="panel-title">Get Your Credential</div>
+            <p class="panel-subtitle">
+              Connect your wallet, upload proof of your business, and get an
+              AI-scored trust credential recorded permanently on BOT Chain.
+            </p>
+
+            <div class="flow-steps" id="flowSteps">
+              <div class="flow-step active" id="fStep1">
+                <span class="flow-step-num">①</span>Connect
+              </div>
+              <div class="flow-step" id="fStep2">
+                <span class="flow-step-num">②</span>Upload
+              </div>
+              <div class="flow-step" id="fStep3">
+                <span class="flow-step-num">③</span>Register
+              </div>
+              <div class="flow-step" id="fStep4">
+                <span class="flow-step-num">④</span>Scored
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label class="input-label">Your Connected Wallet</label>
+              <input
+                type="text"
+                class="wallet-input"
+                id="walletInput"
+                placeholder="Connect wallet to auto-fill"
+                readonly
+              />
+            </div>
+
+            <div class="input-group">
+              <label class="input-label">Proof Document</label>
+              <input
+                type="file"
+                class="file-input"
+                id="documentFile"
+                accept=".pdf,.txt,image/*"
+              />
+            </div>
+
+            <div class="input-group">
+              <label class="input-label">Description (optional)</label>
+              <textarea
+                class="desc-input"
+                id="description"
+                rows="2"
+                placeholder="Business name, address, what you sell..."
+              ></textarea>
+            </div>
+
+            <button
+              class="score-btn"
+              id="requestBtn"
+              onclick="requestScore()"
+              disabled
+            >
+              <span>🦊</span>
+              <span id="requestBtnText">Connect Wallet First</span>
+            </button>
+
+            <button
+              class="btn-ghost-full"
+              id="checkOwnBtn"
+              onclick="checkMyCredential()"
+              disabled
+            >
+              Check My Existing Credential
+            </button>
+
+            <div class="wallet-required-note" id="walletNote">
+              Connect MetaMask to upload proof and register your credential.
+              <a onclick="connectWallet()">Connect now →</a>
+            </div>
+
+            <div
+              class="status-msg"
+              id="statusMsg"
+              role="status"
+              aria-live="polite"
+            ></div>
+          </div>
+
+          <!-- RESULT PANEL -->
+          <div class="score-result-panel" id="resultPanel">
+            <div class="score-empty" id="emptyState">
+              <div class="score-empty-icon">◎</div>
+              <div class="score-empty-text">
+                Connect your wallet to get started
+              </div>
+            </div>
+
+            <div class="score-display" id="scoreDisplay">
+              <div
+                class="score-badge-row"
+                id="scoreBadgeRow"
+                style="display: none"
+              ></div>
+              <div style="text-align: center; margin-bottom: 8px">
+                <div class="score-big" id="scoreBig">—</div>
+                <span class="score-label-badge" id="scoreBadge">—</span>
+              </div>
+              <div class="score-gauge">
+                <div
+                  class="score-gauge-fill"
+                  id="scoreGauge"
+                  style="width: 0%"
+                ></div>
+              </div>
+
+              <div class="result-section-label">✓ On-Chain Credential</div>
+              <div class="score-breakdown" id="scoreBreakdown"></div>
+              <div class="tx-link" id="txLink"></div>
+
+              <div id="docScanSection" style="display: none; width: 100%">
+                <div class="result-section-label ai-section">
+                  🔍 AI Document Scan
+                </div>
+                <div class="not-onchain-note">
+                  Extracted by AI from the uploaded document just now. Not
+                  written to the blockchain — only score and tier above are
+                  permanent.
+                </div>
+                <div
+                  class="score-reasoning"
+                  id="scoreReasoning"
+                  style="display: none"
+                ></div>
+                <div class="doc-scan-grid" id="docScanGrid"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="how-section">
+        <div class="section-label">How It Works</div>
+        <div class="steps">
+          <div class="step highlight">
+            <div class="step-num">01</div>
+            <div class="step-title">Upload Proof</div>
+            <div class="step-desc">
+              A registration document, a receipt, a storefront photo — anything
+              showing your business is real. It's hashed and stored, never
+              altered.
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">02</div>
+            <div class="step-title">AI Reads It</div>
+            <div class="step-desc">
+              The document's actual content — text or image — is judged for
+              legitimacy. Vague or unrelated uploads score low, honestly.
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">03</div>
+            <div class="step-title">Credential Sealed</div>
+            <div class="step-desc">
+              A Bronze, Silver, or Gold trust credential is written on-chain,
+              tied to your wallet — readable by any BOT Chain app from then on.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="contracts-section">
+        <div class="section-label">Live Contract — BOT Chain Testnet</div>
+        <div class="contracts-grid">
+          <div class="contract-card">
+            <div class="contract-tag">Verified Source</div>
+            <div class="contract-name">BizTrace</div>
+            <div class="contract-desc">
+              Registers merchant proof hashes and stores AI-scored trust
+              credentials. Non-transferable, one credential per wallet.
+            </div>
+            <div class="contract-addr">
+              <a
+                href="https://scan.botchain.ai/address/0xde8365dAF3CFdF952E2F946F19a4DcAcd57eFf0F"
+                target="_blank"
+              >
+                0xde8365dAF3CFdF952E2F946F19a4DcAcd57eFf0F ↗
+              </a>
+            </div>
+          </div>
+          <div class="contract-card">
+            <div class="contract-tag">Off-Chain AI</div>
+            <div class="contract-name">Scoring Service</div>
+            <div class="contract-desc">
+              Extracts document text or reads images directly, scores legitimacy
+              via Groq (GPT-OSS-120B for text, Qwen3.6-27B vision for images),
+              submits the verdict on-chain.
+            </div>
+            <div class="contract-addr">
+              Runs alongside this frontend — same deployment, same origin.
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <footer>
+      <div class="footer-inner">
+        <div class="footer-logo">Biz<span>Trace</span></div>
+        <div class="footer-right">
+          Built for the BOT Chain Africa Builder Challenge 2026
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      const API_URL = window.location.origin;
+      const CONTRACT_ADDRESS = "0xde8365dAF3CFdF952E2F946F19a4DcAcd57eFf0F";
+      const CONTRACT_ABI = [
+        "function registerMerchant(string proofHash) external",
+        "function getCredential(address merchant) view returns (bool,bool,uint8,string,string,uint64)",
+      ];
+
+      let provider, signer, contract, connectedAddress;
+
+      function getScoreColorClass(tier) {
+        return (
+          {
+            Gold: "gold",
+            Silver: "silver",
+            Bronze: "bronze",
+            Unverified: "unverified",
+          }[tier] || "unverified"
+        );
+      }
+      function getGaugeColor(tier) {
+        return (
+          {
+            Gold: "#c8f55a",
+            Silver: "#4ade80",
+            Bronze: "#fbbf24",
+            Unverified: "#ef4444",
+          }[tier] || "#ef4444"
+        );
+      }
+
+      function displayCredential(data, txHash, docScan) {
+        document.getElementById("emptyState").style.display = "none";
+        const display = document.getElementById("scoreDisplay");
+        display.classList.add("visible");
+
+        const score = data.score;
+        const tier = data.tier;
+        const colorClass = getScoreColorClass(tier);
+        const gaugeWidth = score;
+
+        const badgeRow = document.getElementById("scoreBadgeRow");
+        badgeRow.style.display = "flex";
+        if (data.verified) {
+          badgeRow.style.color = "var(--silver)";
+          badgeRow.innerHTML = `<span class="badge-dot green"></span> Verified on BOT Chain`;
+        } else {
+          badgeRow.style.color = "#fbbf24";
+          badgeRow.innerHTML = `<span class="badge-dot yellow"></span> Registered — awaiting AI verification`;
+        }
+
+        const scoreBig = document.getElementById("scoreBig");
+        scoreBig.textContent = score;
+        scoreBig.className = `score-big c-${colorClass}`;
+
+        const badge = document.getElementById("scoreBadge");
+        badge.textContent = tier;
+        badge.className = `score-label-badge bg-${colorClass}`;
+
+        const gauge = document.getElementById("scoreGauge");
+        setTimeout(() => {
+          gauge.style.width = gaugeWidth + "%";
+          gauge.style.background = getGaugeColor(tier);
+        }, 100);
+
+        // ---- ON-CHAIN CREDENTIAL (permanent, always shown) ----
+        document.getElementById("scoreBreakdown").innerHTML = [
+          {
+            key: "Registered",
+            val: data.registered ? "✓ Yes" : "✗ No",
+            positive: data.registered,
+          },
+          {
+            key: "Verified",
+            val: data.verified ? "✓ Yes" : "⏳ Pending",
+            positive: data.verified,
+          },
+        ]
+          .map(
+            (item) => `
+      <div class="breakdown-item">
+        <div class="breakdown-key">${item.key}</div>
+        <div class="breakdown-val ${item.positive ? "positive" : ""}">${
+              item.val
+            }</div>
+      </div>
+    `,
+          )
+          .join("");
+
+        const txLink = document.getElementById("txLink");
+        if (txHash) {
+          txLink.innerHTML = `Registered on BOT Chain → <a href="https://scan.botchain.ai/tx/${txHash}" target="_blank">${txHash.slice(
+            0,
+            10,
+          )}...${txHash.slice(-6)} ↗</a>`;
+        } else if (data.proofHash) {
+          txLink.innerHTML = `Proof hash: ${data.proofHash.slice(
+            0,
+            14,
+          )}...${data.proofHash.slice(-8)}`;
+        } else {
+          txLink.innerHTML = "";
+        }
+
+        // ---- AI DOCUMENT SCAN (session-only, NOT stored on-chain) ----
+        // Only shown right after a fresh upload+score in THIS session — a plain
+        // wallet-only lookup (checkMyCredential) has no way to know this, since it isn't
+        // recorded on-chain, so docScan is omitted entirely for lookups.
+        const docScanSection = document.getElementById("docScanSection");
+        const reasoningEl = document.getElementById("scoreReasoning");
+
+        if (docScan) {
+          docScanSection.style.display = "block";
+
+          if (docScan.reasoning) {
+            reasoningEl.style.display = "block";
+            reasoningEl.textContent = docScan.reasoning;
+          } else {
+            reasoningEl.style.display = "none";
+          }
+
+          document.getElementById("docScanGrid").innerHTML = [
+            {
+              key: "Business Name",
+              val: docScan.businessName || "Not detected",
+            },
+            { key: "Document Type", val: docScan.documentType || "Other" },
+            {
+              key: "Registration No. Present",
+              val: docScan.hasRegistrationNumber ? "✓ Yes" : "✗ No",
+              cls: docScan.hasRegistrationNumber ? "yes" : "no",
+            },
+          ]
+            .map(
+              (item) => `
+        <div class="doc-scan-item">
+          <span class="doc-scan-key">${item.key}</span>
+          <span class="doc-scan-val ${item.cls || ""}">${item.val}</span>
+        </div>
+      `,
+            )
+            .join("");
+        } else {
+          docScanSection.style.display = "none";
+        }
+      }
+
+      async function checkMyCredential() {
+        if (!connectedAddress)
+          return setStatus("error", "Connect your wallet first.");
+
+        setStatus(
+          "loading",
+          `⏳ Checking your credential<span class="loading-dots"></span>`,
+        );
+
+        try {
+          const res = await fetch(`${API_URL}/credential/${connectedAddress}`);
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Lookup failed");
+          if (!data.registered) {
+            clearStatus();
+            document.getElementById("emptyState").style.display = "block";
+            document
+              .getElementById("emptyState")
+              .querySelector(".score-empty-text").textContent =
+              "You don't have a credential yet — upload proof to get one";
+            document.getElementById("scoreDisplay").classList.remove("visible");
+            return;
+          }
+          clearStatus();
+          displayCredential(data, null);
+        } catch (e) {
+          setStatus("error", "✗ " + e.message);
+        }
+      }
+
+      async function connectWallet() {
+        if (!window.ethereum)
+          return alert("Please install MetaMask to use BizTrace.");
+        try {
+          await window.ethereum.request({ method: "eth_requestAccounts" });
+          provider = new ethers.BrowserProvider(window.ethereum);
+          signer = await provider.getSigner();
+          connectedAddress = await signer.getAddress();
+          contract = new ethers.Contract(
+            CONTRACT_ADDRESS,
+            CONTRACT_ABI,
+            signer,
+          );
+
+          const btn = document.getElementById("connectBtn");
+          btn.textContent =
+            connectedAddress.slice(0, 6) + "..." + connectedAddress.slice(-4);
+          btn.classList.add("connected");
+          document.getElementById("walletInput").value = connectedAddress;
+          document.getElementById("requestBtnText").textContent =
+            "Upload, Register & Score";
+          document.getElementById("requestBtn").disabled = false;
+          document.getElementById("checkOwnBtn").disabled = false;
+          document.getElementById("walletNote").style.display = "none";
+          setFlowStep(2);
+
+          checkMyCredential();
+        } catch (e) {
+          alert("Connection failed: " + e.message);
+        }
+      }
+
+      function setFlowStep(step) {
+        for (let i = 1; i <= 4; i++) {
+          const el = document.getElementById(`fStep${i}`);
+          el.classList.remove("active", "done");
+          if (i < step) el.classList.add("done");
+          else if (i === step) el.classList.add("active");
+        }
+      }
+
+      function setStatus(type, msg) {
+        const el = document.getElementById("statusMsg");
+        el.className = `status-msg ${type}`;
+        el.innerHTML = msg;
+      }
+      function clearStatus() {
+        const el = document.getElementById("statusMsg");
+        el.className = "status-msg";
+        el.textContent = "";
+      }
+
+      async function requestScore() {
+        if (!contract) return connectWallet();
+
+        const fileInput = document.getElementById("documentFile");
+        const description = document.getElementById("description").value.trim();
+        if (!fileInput.files[0])
+          return setStatus("error", "Choose a document to upload first.");
+
+        const btn = document.getElementById("requestBtn");
+        const btnText = document.getElementById("requestBtnText");
+        btn.disabled = true;
+        clearStatus();
+
+        try {
+          setStatus(
+            "loading",
+            `📤 Uploading & hashing document<span class="loading-dots"></span>`,
+          );
+          setFlowStep(2);
+
+          const formData = new FormData();
+          formData.append("document", fileInput.files[0]);
+          const hashRes = await fetch(`${API_URL}/hash-document`, {
+            method: "POST",
+            body: formData,
+          });
+          const hashData = await hashRes.json();
+          if (hashData.error) throw new Error(hashData.error);
+
+          setStatus(
+            "loading",
+            `🦊 Confirm the transaction in MetaMask<span class="loading-dots"></span>`,
+          );
+          setFlowStep(3);
+          btnText.textContent = "Waiting for signature…";
+
+          const tx = await contract.registerMerchant(hashData.fileHash);
+
+          setStatus(
+            "loading",
+            `⏳ Waiting for confirmation<span class="loading-dots"></span>`,
+          );
+          await tx.wait();
+
+          setStatus(
+            "loading",
+            `🔍 AI scoring your document<span class="loading-dots"></span>`,
+          );
+          setFlowStep(4);
+
+          const scoreRes = await fetch(`${API_URL}/score`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              merchantAddress: connectedAddress,
+              fileHash: hashData.fileHash,
+              description,
+            }),
+          });
+          const scoreData = await scoreRes.json();
+          if (scoreData.error) throw new Error(scoreData.error);
+
+          clearStatus();
+          setStatus("success", "🎉 Credential scored and recorded on-chain!");
+          displayCredential(
+            {
+              registered: true,
+              verified: true,
+              score: scoreData.score,
+              tier: scoreData.tier,
+              proofHash: hashData.fileHash,
+            },
+            scoreData.txHash,
+            {
+              reasoning: scoreData.reasoning,
+              businessName: scoreData.businessName,
+              documentType: scoreData.documentType,
+              hasRegistrationNumber: scoreData.hasRegistrationNumber,
+            },
+          );
+          btnText.textContent = "Credential Updated ✓";
+        } catch (e) {
+          const msg =
+            e?.reason ||
+            e?.shortMessage ||
+            e?.message ||
+            "Something went wrong";
+          if (msg.includes("user rejected") || msg.includes("denied")) {
+            setStatus("error", "✗ Transaction cancelled.");
+          } else {
+            setStatus("error", "✗ " + msg);
+          }
+          setFlowStep(2);
+        } finally {
+          btn.disabled = false;
+          if (btnText.textContent !== "Credential Updated ✓") {
+            btnText.textContent = "Upload, Register & Score";
+          }
+        }
+      }
+    </script>
+  </body>
+</html>
